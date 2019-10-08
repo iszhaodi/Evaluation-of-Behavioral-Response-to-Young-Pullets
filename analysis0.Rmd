@@ -1,0 +1,160 @@
+---
+title: "Code"
+author: "Di"
+date: "6/3/2019"
+---
+
+#input data
+```{r}
+setwd( "C:/Users/Di/Desktop/JOB/mixed model/data")
+scan <- read.csv("scan sampling.csv", header = T)
+scan[, c(2,7)] <- lapply(scan[, c(2,7)], as.factor)
+scan <- scan[, c(2,3,7:13)]
+```
+
+#NA
+```{r}
+sum(is.na(scan))
+```
+
+
+# data exploration
+## scan sampling
+```{r}
+library(ggplot2)
+
+# WApproach
+#Boxplot of Proportion of Time Spent on Approaching White Wiffle Ball
+p1 <- ggplot(scan, aes(fill = Trt, y = WApproach, x = Trt)) +
+  geom_boxplot() +
+  facet_wrap(~Interval, labeller = label_both) +
+  #theme(axis.text.x = element_text(angle = 45, hjust = 1)) + #Italian type
+  xlab("PAWS Treatments") + 
+  ylab("Movement towards the White Wiffle Ball (%)") +
+  ggtitle("A. Boxplot of Proportion of Time Spent on Approaching White Wiffle Ball")
+
+#Boxplot of Proportion of Time Spent on Approaching Black Wiffle Ball
+p2 <- ggplot(scan, aes(fill = Trt, y = BApproach, x = Trt)) +
+  geom_boxplot() +
+  facet_wrap(~Interval, labeller = label_both) +
+  #theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("PAWS Treatments") + 
+  ylab("Movement towards the Black Wiffle Ball (%)") +
+  ggtitle("B. Boxplot of Proportion of Time Spent on Approaching Black Wiffle Ball")
+
+#Boxplot of Proportion of Time Spent on Staying Away from the Novel object
+p3 <- ggplot(scan, aes(fill = Trt, y = Away, x = Trt)) +
+  geom_boxplot() +
+  facet_wrap(~Interval, labeller = label_both) +
+  #theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("PAWS Treatments") + 
+  ylab("Movement away from the Novel object (%)") +
+  ggtitle("C. Boxplot of Proportion of Time Spent on Staying Away from the Novel object")
+
+#Boxplot of Proportion of Time Spent on Eating or Drinking
+p4 <- ggplot(scan, aes(fill = Trt, y = EatDrink, x = Trt)) +
+  geom_boxplot() +
+  facet_wrap(~Interval, labeller = label_both) +
+  #theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("PAWS Treatments") + 
+  ylab("Eating or Drinking (%)") +
+  ggtitle("D. Boxplot of Proportion of Time Spent on Eating or Drinking")
+
+#Boxplot of Proportion of Time Spent on Standing Still
+p5 <- ggplot(scan, aes(fill = Trt, y = Still, x = Trt)) +
+  geom_boxplot() +
+  facet_wrap(~Interval, labeller = label_both) +
+  #theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("PAWS Treatments") + 
+  ylab("Stand still (%)") +
+  ggtitle("E. Boxplot of Proportion of Time Spent on Standing Still")
+
+#Boxplot of Proportion of Time Spent on Neutral Movement
+p6 <- ggplot(scan, aes(fill = Trt, y = Neutral, x = Trt)) +
+  geom_boxplot() +
+  facet_wrap(~Interval, labeller = label_both) +
+  #theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  xlab("PAWS Treatments") + 
+  ylab("Neutral movement (%)") +
+  ggtitle("F. Boxplot of Proportion of Time Spent on Neutral Movement")
+
+p1
+p2
+p3
+p4
+p5
+p6
+```
+
+# Methods/Analysis 
+## Behavior analysis
+```{r}
+#make model
+#use scan sample variable
+library(lme4)
+f1 <- lmer(sqrt(WApproach) ~ Trt * Interval + (1|Tent), data = scan)
+f2 <- lmer(BApproach ~ Trt * Interval + (1|Tent), data = scan) 
+f3 <- lmer(Away^(1/4) ~ Trt * Interval + (1|Tent), data = scan) 
+f4 <- lmer(sqrt(EatDrink) ~ Trt * Interval + (1|Tent), data = scan) 
+f5 <- lmer(Still ~ Trt * Interval + (1|Tent), data = scan) 
+f6 <- lmer(Neutral ~ Trt * Interval + (1|Tent), data = scan) 
+
+f <- c(f1,f2,f3,f4,f5,f6)
+variable <- c(names(scan)[4:9])
+```
+
+##3.2 Assumption check
+```{r}
+#normalility check
+
+#shapiro.test
+p.mix <- rep(0, 6)
+for (i in 1:6) {
+  p.mix[i] <- shapiro.test(resid(f[i][[1]]))$p.value
+}
+which(p.mix<0.05)
+data.frame(variable, p.val = p.mix)
+#p-value <= 0.05, reject the NULL hypothesis that the samples came from a Normal distribution.
+
+#Q-Q plot
+par(mfrow = c(2, 3), oma = c( 0, 0, 2, 0 ))
+for (i in 1:6) {
+  qqnorm(resid(f[i][[1]]), main = paste(letters[i], ".", variable[i]))
+  qqline(resid(f[i][[1]]), col = 2)
+}
+title("Normal Q-Q Plot for Residuals", outer = TRUE) #overall title
+```
+
+```{r}
+#equal variance check
+
+#residuals vs fitted values
+par(mfrow = c(2, 3), oma = c( 0, 0, 2, 0 ))
+for (i in 1:6) {
+  plot(fitted(f[i][[1]]), resid(f[i][[1]]), 
+       xlab = "Fitted Value", ylab = "Residuals",
+       main = paste(letters[i], ".", variable[i]))
+  abline(h = 0, col = 2)
+}
+title("D. Residuals vs Fitted Values", outer = TRUE) #overall title
+```
+
+#comparison
+```{r}
+library(emmeans)
+
+compare.part <- NULL
+compare.full <- NULL
+
+for (i in 1:6) { 
+  compare <- emmeans(f[i][[1]], dunnett~Trt|Interval)$contrasts
+  if(sum(data.frame(compare)[,7] < 0.05) > 0) {
+      which.sig <- which(data.frame(compare)[,7] < 0.05)
+      compare.part <- cbind(Variable = variable[i], data.frame(compare)[which.sig, 1:3])
+      compare.full <- rbind(compare.full, compare.part)
+  }
+}
+
+compare.full 
+```
+
